@@ -1,3 +1,5 @@
+# Task description
+
 FILMWORKZ
 
 The Video Player Challenge
@@ -15,4 +17,14 @@ The ability to stream online videos as well as local files.
 
 **Preferred Tech:** *Javascript (pref Typescript), React, CSS, HTML.
 
+# How to launch
+ 
+open terminal and input this: 
+```
+git clone git@github.com:artikvatruwka/filmworkz.git; 
+cd filmworkz/my-app;
+npm i; 
+npm start;
+```
 
+then open [http://localhost:3000/](http://localhost:3000/)
