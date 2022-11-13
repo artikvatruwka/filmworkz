@@ -1,6 +1,5 @@
 import styled from "styled-components";
 import { Player } from "./components/Player/Player";
-import { WindowDimensionsContextProvider } from "./helpers/useWindowDimensionsContext";
 
 const AppWrapper = styled.div`
   display: flex;
@@ -8,11 +7,9 @@ const AppWrapper = styled.div`
 `;
 function App() {
   return (
-    <WindowDimensionsContextProvider>
-      <AppWrapper>
-        <Player />
-      </AppWrapper>
-    </WindowDimensionsContextProvider>
+    <AppWrapper>
+      <Player />
+    </AppWrapper>
   );
 }
 
