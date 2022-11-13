@@ -1,11 +1,18 @@
-import { ButtonHTMLAttributes, memo, useMemo } from "react";
+import {
+  ButtonHTMLAttributes,
+  memo,
+  RefObject,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import styled from "styled-components";
+import { usePlayerControls } from "../../helpers/usePlayerControlls";
 
 export interface VideoControlsProps {
-  isVideoPlaying: boolean;
-  onStart: () => void;
+  controlsEvent: ReturnType<typeof usePlayerControls>["controlsEvent"];
+  onPlay: () => void;
   onPause: () => void;
-  onVolumeChange: () => void;
 }
 
 const EmojiButton = styled.button`
@@ -38,12 +45,26 @@ const StopButton = (props: ButtonHTMLAttributes<HTMLButtonElement>) => (
 );
 
 export const VideoControls = memo((props: VideoControlsProps) => {
-  const { isVideoPlaying, onStart, onPause, onVolumeChange } = props;
+  const { onPlay, onPause, controlsEvent } = props;
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
+  useEffect(() => {
+    const events = [
+      controlsEvent.current.pause.subscribe(() => {
+        setIsVideoPlaying(false);
+      }),
+      controlsEvent.current.play.subscribe(() => {
+        setIsVideoPlaying(true);
+      }),
+    ];
+    return () => events.forEach((event) => event.unsubscribe());
+  }, []);
+
+  controlsEvent.current.pause.subscribe();
   const FirstButton = () => {
     if (isVideoPlaying)
       return <StopButton onClick={onPause} aria-label="stop video" />;
-    return <PlayButton onClick={onStart} aria-label="start video" />;
+    return <PlayButton onClick={onPlay} aria-label="start video" />;
   };
   return (
     <>

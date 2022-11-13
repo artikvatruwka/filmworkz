@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fromEvent, interval, Subscribable, Subscription } from "rxjs";
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
+import { fromEvent } from "rxjs";
 import styled from "styled-components";
-import { useWindowDimensionsContext } from "../../helpers/useWindowDimensionsContext";
+import { usePlayerControls } from "../../helpers/usePlayerControlls";
 import { Bar } from "../Bar/Bar";
+import { FileLoader } from "../FileLoader/FileLoader";
 import { VideoControls } from "../VideoControls/VideoControls";
 import { VideoPlayer } from "../VideoPlayer/VideoPlayer";
 
 const Wrap = styled.div`
-  border: 1px solid red;
-  padding: 10px;
-  margin: 10px;
+  padding: 12px;
 `;
 
 interface VideoDataType {
@@ -17,77 +16,109 @@ interface VideoDataType {
   isPlaying: boolean;
 }
 
-export const Player = () => {
+const TwoVideosContainer = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+`;
+
+const PlayerComponent = ({
+  videoUrl,
+  setVideoUrl,
+}: {
+  videoUrl: string;
+  setVideoUrl: Dispatch<SetStateAction<string>>;
+}) => {
   const playerInterval = 1000 / 60;
-  const { width } = useWindowDimensionsContext();
+  const { controlsEvent, emitPause, emitPlay, emitSeekTo } =
+    usePlayerControls();
 
   const [videoData, setVideoData] = useState<VideoDataType | null>(null);
-  const [currentTime, setCurrentTime] = useState<number>(0);
-
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const play = useCallback(() => {
-    videoRef.current?.play();
-  }, []);
-  const stop = useCallback(() => {
-    videoRef.current?.pause();
-  }, []);
-  const seekTo = (time: number) => {
-    videoRef.current?.fastSeek(time);
-  };
-  const isPlaying = useMemo(() => videoData?.isPlaying || false, [videoData]);
+  const videoTwoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
+    const bothVideosLoaded = () => {
+      if (
+        videoRef.current?.readyState == 4 &&
+        videoTwoRef.current?.readyState == 4
+      ) {
+        setVideoData({ duration: videoRef.current.duration, isPlaying: false });
+      }
+    };
+
+    const seekVideos = (timeMs: number) => {
+      videoRef.current!.currentTime = timeMs / 1000;
+      videoTwoRef.current!.currentTime = timeMs / 1000;
+    };
+
+    const playVideos = () => {
+      videoRef.current!.play();
+      videoTwoRef.current!.play();
+      videoRef.current!.currentTime = videoTwoRef.current!.currentTime;
+    };
+
+    const pauseVideos = () => {
+      videoRef.current!.pause();
+      videoTwoRef.current!.pause();
+      videoRef.current!.currentTime = videoTwoRef.current!.currentTime;
+    };
+
     const events = [
-      fromEvent(videoRef.current, "loadeddata").subscribe(() => {
-        if (videoRef.current?.readyState != 4) return;
-        setVideoData({
-          duration: video.duration,
-          isPlaying: video.autoplay,
-        });
-        setCurrentTime(video.currentTime);
+      fromEvent(videoRef.current!, "canplaythrough").subscribe(() => {
+        bothVideosLoaded();
       }),
-      fromEvent(videoRef.current, "play").subscribe(() => {
-        console.log("play");
-        setVideoData((data) => ({
-          ...(data as VideoDataType),
-          isPlaying: true,
-        }));
-      }),
-      fromEvent(videoRef.current, "pause").subscribe(() => {
-        setCurrentTime(video.currentTime);
-        setVideoData((data) => ({
-          ...(data as VideoDataType),
-          isPlaying: false,
-        }));
-      }),
+
+      controlsEvent.current.play.subscribe(playVideos),
+      controlsEvent.current.pause.subscribe(pauseVideos),
+      controlsEvent.current.seekTo.subscribe(seekVideos),
     ];
     return () => events.forEach((event) => event.unsubscribe());
   }, []);
-  console.log(videoData);
+
   return (
     <>
       <Wrap>
-        <VideoPlayer
-          width={width / 2}
-          ref={videoRef}
-          sourceUrl="https://mdn.github.io/learning-area/html/multimedia-and-embedding/video-and-audio-content/rabbit320.mp4"
-        />
-      </Wrap>
-      <Wrap>
-        <Bar videoRef={videoRef} intervalMs={playerInterval} />
+        <TwoVideosContainer>
+          <VideoPlayer width="100%" ref={videoRef} sourceUrl={videoUrl} />
+          <VideoPlayer width="100%" ref={videoTwoRef} sourceUrl={videoUrl} />
+        </TwoVideosContainer>
       </Wrap>
       <Wrap>
         <VideoControls
-          isVideoPlaying={isPlaying}
-          onPause={stop}
-          onStart={play}
-          onVolumeChange={function (): void {
-            throw new Error("Function not implemented.");
+          controlsEvent={controlsEvent}
+          onPlay={emitPlay}
+          onPause={emitPause}
+        />
+        <div>
+          <Bar
+            onSeek={emitSeekTo}
+            intervalMs={playerInterval}
+            controlsEvent={controlsEvent}
+            duration={Math.floor((videoData?.duration || 0) * 1000)}
+          />
+        </div>
+      </Wrap>
+      <Wrap>
+        <h1>Video upload</h1>
+        <FileLoader
+          getVideo={(url) => {
+            setVideoUrl(url);
           }}
         />
       </Wrap>
     </>
+  );
+};
+export const Player = () => {
+  const [videoUrl, setVideoUrl] = useState<string>(
+    "http://localhost:3000/videoplayback.mp4"
+  );
+  return (
+    <PlayerComponent
+      videoUrl={videoUrl}
+      setVideoUrl={setVideoUrl}
+      key={videoUrl}
+    />
   );
 };

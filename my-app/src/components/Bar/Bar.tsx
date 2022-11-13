@@ -1,6 +1,7 @@
-import { forwardRef, RefObject, useEffect, useState } from "react";
-import { fromEvent, interval, Subscription } from "rxjs";
+import { forwardRef, RefObject, useEffect, useRef, useState } from "react";
+import { fromEvent, interval, Observable, Subscription } from "rxjs";
 import styled from "styled-components";
+import { usePlayerControls } from "../../helpers/usePlayerControlls";
 import { VideoPlayerProps } from "../VideoPlayer/VideoPlayer";
 
 interface BarComponentProps {
@@ -9,6 +10,7 @@ interface BarComponentProps {
 }
 
 const BarComponent = styled.div<BarComponentProps>`
+  cursor: pointer;
   width: 100%;
   height: 4px;
   background: red;
@@ -27,45 +29,92 @@ const BarComponent = styled.div<BarComponentProps>`
   }
 `;
 
+const Timer = styled.span`
+  text-align: center;
+  width: 100%;
+  display: block;
+`;
+
 interface BarProps {
-  videoRef: RefObject<HTMLVideoElement>;
+  controlsEvent: ReturnType<typeof usePlayerControls>["controlsEvent"];
+  onSeek: (time: number) => void;
+  duration: number;
   intervalMs: number;
 }
-export const Bar = ({ videoRef, intervalMs }: BarProps) => {
-  const [duration, setDuration] = useState(videoRef.current?.duration || 0);
-  const [currentTime, setCurrentTime] = useState(
-    videoRef.current?.currentTime || 0
-  );
+export const Bar = ({
+  onSeek,
+  duration,
+  intervalMs,
+  controlsEvent,
+}: BarProps) => {
+  const [currentTime, setCurrentTime] = useState(0);
+  const [timerActive, setTimerActive] = useState(false);
+  const [paused, setPaused] = useState(true);
+  const timestampRef = useRef<number>();
+  const startingTimeRef = useRef<number>();
+  const updateIntervalSubscriptionRef = useRef<Subscription>();
 
   useEffect(() => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    let updateCurrentTimeInterval: Subscription;
     const events = [
-      fromEvent(video, "loadeddata").subscribe(() => {
-        if (video?.readyState != 4) return;
-        setDuration(video.duration);
-        setCurrentTime(video.currentTime);
+      controlsEvent.current.play.subscribe(() => {
+        timestampRef.current = Date.now();
+        startingTimeRef.current = Date.now();
+        setTimerActive(true);
+        setPaused(false);
       }),
-      fromEvent(video, "play").subscribe(() => {
-        setCurrentTime(video.currentTime);
-        updateCurrentTimeInterval = interval(intervalMs).subscribe(() => {
-          setCurrentTime(video.currentTime);
+      controlsEvent.current.pause.subscribe(() => {
+        timestampRef.current = Date.now();
+        startingTimeRef.current = Date.now();
+        setTimerActive(false);
+        setPaused(true);
+      }),
+      controlsEvent.current.seekTo.subscribe((time) => {
+        timestampRef.current = Date.now();
+        startingTimeRef.current = Date.now();
+        setTimerActive(false);
+        setTimeout(() => {
+          setTimerActive(true);
         });
-      }),
-      fromEvent(video, "pause").subscribe(() => {
-        setCurrentTime(video.currentTime);
-        updateCurrentTimeInterval.unsubscribe();
+        setCurrentTime(time);
       }),
     ];
-
-    return () => events.forEach((event) => event.unsubscribe());
+    return () => {
+      events.forEach((event) => event.unsubscribe());
+    };
   }, []);
+
+  useEffect(() => {
+    if (timerActive && !paused && timestampRef.current != null) {
+      updateIntervalSubscriptionRef.current = interval(intervalMs).subscribe(
+        () => {
+          setCurrentTime(
+            timestampRef.current! - startingTimeRef.current! + currentTime
+          );
+          timestampRef.current = Date.now();
+        }
+      );
+    } else {
+      updateIntervalSubscriptionRef.current?.unsubscribe();
+    }
+    return () => {
+      updateIntervalSubscriptionRef.current?.unsubscribe();
+    };
+  }, [timerActive, paused]);
 
   return (
     <>
-      {new Date(currentTime * 1000).toISOString().substring(11, 23)}
+      <Timer>
+        {new Date(currentTime).toISOString().substring(11, 23)} /{" "}
+        {new Date(duration).toISOString().substring(11, 23)}
+      </Timer>
       <BarComponent
+        onClick={(event) => {
+          const barPercentage =
+            (event.clientX - event.currentTarget.offsetLeft) /
+            event.currentTarget.offsetWidth;
+          setCurrentTime(barPercentage * duration);
+          onSeek(barPercentage * duration);
+        }}
         percentage={(currentTime * 100) / duration}
         interval={intervalMs}
       />
